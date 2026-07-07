@@ -214,9 +214,10 @@ function haversine(lat1, lon1, lat2, lon2) {
 
 function parseGPX(xmlStr) {
   const doc = new DOMParser().parseFromString(xmlStr, 'application/xml');
-  const ns = 'http://www.topografix.com/GPX/1/1';
-  let pts = [...doc.getElementsByTagNameNS(ns, 'trkpt'), ...doc.getElementsByTagNameNS(ns, 'rtept')];
-  if (!pts.length) pts = [...doc.querySelectorAll('trkpt, rtept')];
+  const ns  = 'http://www.topografix.com/GPX/1/1';
+  const get  = (el, tag) => el.getElementsByTagNameNS(ns, tag)[0] || el.getElementsByTagNameNS('*', tag)[0];
+  const getAll = (tag) => [...doc.getElementsByTagNameNS(ns, tag)];
+  const pts  = [...getAll('trkpt'), ...getAll('rtept')];
   if (!pts.length) return null;
 
   const latLngs = [];
@@ -225,8 +226,7 @@ function parseGPX(xmlStr) {
   for (const pt of pts) {
     const lat = parseFloat(pt.getAttribute('lat'));
     const lon = parseFloat(pt.getAttribute('lon'));
-    const eleEl = pt.getElementsByTagNameNS('*', 'ele')[0] || pt.querySelector('ele');
-    const ele = parseFloat(eleEl?.textContent ?? 'NaN');
+    const ele = parseFloat(get(pt, 'ele')?.textContent ?? 'NaN');
     if (isNaN(lat) || isNaN(lon)) continue;
     if (prev) {
       dist += haversine(prev.lat, prev.lon, lat, lon);
@@ -236,10 +236,10 @@ function parseGPX(xmlStr) {
     latLngs.push([lat, lon]);
   }
 
-  const timeEl = doc.getElementsByTagNameNS('*','time')[0] || doc.querySelector('time');
-  const date = timeEl ? new Date(timeEl.textContent) : null;
-  const nameEl = doc.getElementsByTagNameNS('*','name')[0] || doc.querySelector('name');
-  const name = nameEl?.textContent.trim() || null;
+  const timeEl = get(doc, 'time');
+  const date   = timeEl ? new Date(timeEl.textContent) : null;
+  const nameEl = get(doc, 'name');
+  const name   = nameEl?.textContent.trim() || null;
 
   return { latLngs, distKm: dist / 1000, elevM: Math.round(elev), date, name };
 }
