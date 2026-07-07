@@ -232,7 +232,15 @@ function parseGPX(xmlStr) {
   const get  = (el, tag) => el.getElementsByTagNameNS(ns, tag)[0] || el.getElementsByTagNameNS('*', tag)[0];
   const getAll = (tag) => [...doc.getElementsByTagNameNS(ns, tag)];
   const pts  = [...getAll('trkpt'), ...getAll('rtept')];
-  if (!pts.length) return null;
+  dbg('parseGPX: ns=' + ns + ' pts=' + pts.length);
+  if (!pts.length) {
+    // Try without namespace as fallback
+    const fallback = [...doc.querySelectorAll('trkpt, rtept')];
+    dbg('parseGPX: fallback querySelectorAll pts=' + fallback.length);
+    const rootTag = doc.documentElement ? doc.documentElement.tagName : 'none';
+    dbg('parseGPX: root tag=' + rootTag);
+    return null;
+  }
 
   const latLngs = [];
   let dist = 0, elev = 0, prev = null;
