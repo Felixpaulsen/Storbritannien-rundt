@@ -138,6 +138,7 @@
     .route-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
     .bike-marker { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+    .transfer-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); }
 
     .map-wrap { flex: 1; position: relative; }
     #map { width: 100%; height: 100%; }
@@ -309,7 +310,7 @@ async function loadAllRoutes() {
 
       const color    = COLORS[rides.length % COLORS.length];
       const polyline = L.polyline(data.latLngs, { color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
-      rides.push({ id: rides.length, name: data.name || filename.replace(/\.gpx$/i,''), color, distKm: data.distKm, elevM: data.elevM, date: data.date, polyline, latLngs: data.latLngs });
+      rides.push({ id: rides.length, name: data.name || filename.replace(/\.gpx$/i,''), filename, color, distKm: data.distKm, elevM: data.elevM, date: data.date, polyline, latLngs: data.latLngs });
     } catch (e) {
       console.warn(`Skipped ${filename}:`, e.message);
     }
@@ -320,6 +321,7 @@ async function loadAllRoutes() {
   if (rides.length) {
     map.fitBounds(L.latLngBounds(rides.flatMap(r => r.latLngs)).pad(0.08));
     placeBikeMarker();
+    await loadTransfers();
   }
 }
 
@@ -340,6 +342,52 @@ function placeBikeMarker() {
   L.marker(lastPoint, { icon, zIndexOffset: 1000 })
     .addTo(map)
     .bindTooltip(newest.name, { permanent: false, direction: 'top', offset: [0, -10] });
+}
+
+
+function drawTransfer(fromRide, toRide, mode) {
+  const start = fromRide.latLngs[fromRide.latLngs.length - 1];
+  const end   = toRide.latLngs[0];
+
+  L.polyline([start, end], {
+    color: '#8b949e', weight: 2, opacity: 0.7, dashArray: '6 8'
+  }).addTo(map);
+
+  const mid  = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+  const emoji = mode === 'train' ? '🚆' : '🚗';
+  const label = mode === 'train' ? 'Tog' : 'Bil';
+
+  const icon = L.divIcon({
+    className: '',
+    html: '<div class="transfer-marker">' + emoji + '</div>',
+    iconAnchor: [10, 10]
+  });
+
+  L.marker(mid, { icon, zIndexOffset: 900 })
+    .addTo(map)
+    .bindTooltip(label, { permanent: false, direction: 'top', offset: [0, -8] });
+}
+
+async function loadTransfers() {
+  let transfers;
+  try {
+    const res = await fetch(TRANSFERS);
+    if (!res.ok) return;
+    transfers = await res.json();
+  } catch (e) { return; }
+
+  const rideByFile = {};
+  rides.forEach(r => { rideByFile[r.filename] = r; });
+
+  for (const t of transfers) {
+    const fromRide = rideByFile[t.from];
+    const toRide   = rideByFile[t.to];
+    if (!fromRide || !toRide) {
+      console.warn('Transfer skipped: could not find', t.from, 'or', t.to);
+      continue;
+    }
+    drawTransfer(fromRide, toRide, t.mode);
+  }
 }
 
 loadAllRoutes();
