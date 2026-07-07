@@ -200,7 +200,22 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19
 }).addTo(map);
 
-const MANIFEST = './Routes/manifest.json';
+const MANIFEST  = './Routes/manifest.json';
+const TRANSFERS = './Routes/transfers.json';
+
+function dbg(msg, color) {
+  let box = document.getElementById('debug-box');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'debug-box';
+    box.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;background:rgba(0,0,0,.85);color:#fff;font:12px monospace;padding:10px;border-radius:6px;max-width:420px;max-height:300px;overflow-y:auto;';
+    document.body.appendChild(box);
+  }
+  const line = document.createElement('div');
+  line.style.color = color || '#fff';
+  line.textContent = msg;
+  box.appendChild(line);
+}
 const COLORS = ['#f0a500','#e05a00','#58a6ff','#3fb950','#d2a8ff','#ff7b72','#79c0ff','#ffa657','#7ee787','#56d364'];
 const rides = [];
 
@@ -213,8 +228,19 @@ function haversine(lat1, lon1, lat2, lon2) {
 
 function parseGPX(xmlStr) {
   const doc = new DOMParser().parseFromString(xmlStr, 'application/xml');
-  const pts = [...doc.querySelectorAll('trkpt, rtept')];
-  if (!pts.length) return null;
+  const ns  = 'http://www.topografix.com/GPX/1/1';
+  const get  = (el, tag) => el.getElementsByTagNameNS(ns, tag)[0] || el.getElementsByTagNameNS('*', tag)[0];
+  const getAll = (tag) => [...doc.getElementsByTagNameNS(ns, tag)];
+  const pts  = [...getAll('trkpt'), ...getAll('rtept')];
+  dbg('parseGPX: ns=' + ns + ' pts=' + pts.length);
+  if (!pts.length) {
+    // Try without namespace as fallback
+    const fallback = [...doc.querySelectorAll('trkpt, rtept')];
+    dbg('parseGPX: fallback querySelectorAll pts=' + fallback.length);
+    const rootTag = doc.documentElement ? doc.documentElement.tagName : 'none';
+    dbg('parseGPX: root tag=' + rootTag);
+    return null;
+  }
 
   const latLngs = [];
   let dist = 0, elev = 0, prev = null;
@@ -222,7 +248,7 @@ function parseGPX(xmlStr) {
   for (const pt of pts) {
     const lat = parseFloat(pt.getAttribute('lat'));
     const lon = parseFloat(pt.getAttribute('lon'));
-    const ele = parseFloat(pt.querySelector('ele')?.textContent ?? 'NaN');
+    const ele = parseFloat(get(pt, 'ele')?.textContent ?? 'NaN');
     if (isNaN(lat) || isNaN(lon)) continue;
     if (prev) {
       dist += haversine(prev.lat, prev.lon, lat, lon);
@@ -232,10 +258,10 @@ function parseGPX(xmlStr) {
     latLngs.push([lat, lon]);
   }
 
-  const timeEl = doc.querySelector('metadata time, trkpt time');
-  const date = timeEl ? new Date(timeEl.textContent) : null;
-  const nameEl = doc.querySelector('trk name, name');
-  const name = nameEl?.textContent.trim() || null;
+  const timeEl = get(doc, 'time');
+  const date   = timeEl ? new Date(timeEl.textContent) : null;
+  const nameEl = get(doc, 'name');
+  const name   = nameEl?.textContent.trim() || null;
 
   return { latLngs, distKm: dist / 1000, elevM: Math.round(elev), date, name };
 }
@@ -298,6 +324,7 @@ async function loadAllRoutes() {
     manifest = await res.json();
   } catch (e) {
     console.error('Could not load manifest.json:', e.message);
+    dbg('ERROR: manifest.json failed: ' + e.message, '#ff7b72');
     return;
   }
 
@@ -313,11 +340,13 @@ async function loadAllRoutes() {
       rides.push({ id: rides.length, name: data.name || filename.replace(/\.gpx$/i,''), filename, color, distKm: data.distKm, elevM: data.elevM, date: data.date, polyline, latLngs: data.latLngs });
     } catch (e) {
       console.warn(`Skipped ${filename}:`, e.message);
+      dbg('Skipped ' + filename + ': ' + e.message, '#ffa657');
     }
     updateStats();
     renderRouteList();
   }
 
+  dbg('Loaded ' + rides.length + ' rides', rides.length ? '#3fb950' : '#ff7b72');
   if (rides.length) {
     map.fitBounds(L.latLngBounds(rides.flatMap(r => r.latLngs)).pad(0.08));
     placeBikeMarker();
