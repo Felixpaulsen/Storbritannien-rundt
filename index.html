@@ -326,10 +326,12 @@ async function loadAllRoutes() {
 }
 
 function placeBikeMarker() {
+  if (!rides.length) return;
   const dated = rides.filter(r => r.date && !isNaN(r.date));
   const newest = dated.length
     ? dated.reduce((a, b) => a.date > b.date ? a : b)
     : rides[rides.length - 1];
+  if (!newest) return;
 
   const lastPoint = newest.latLngs[newest.latLngs.length - 1];
 
@@ -378,14 +380,17 @@ async function loadTransfers() {
 
   const rideByFile = {};
   rides.forEach(r => { rideByFile[r.filename] = r; });
+  console.log('Transfers: known filenames:', Object.keys(rideByFile));
+  console.log('Transfers: entries to draw:', transfers);
 
   for (const t of transfers) {
     const fromRide = rideByFile[t.from];
     const toRide   = rideByFile[t.to];
     if (!fromRide || !toRide) {
-      console.warn('Transfer skipped: could not find', t.from, 'or', t.to);
+      console.warn('Transfer skipped: could not find "' + t.from + '" or "' + t.to + '" in known filenames:', Object.keys(rideByFile));
       continue;
     }
+    console.log('Drawing transfer:', t.from, '->', t.to, '(' + t.mode + ')');
     drawTransfer(fromRide, toRide, t.mode);
   }
 }
