@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Storbritannien rundt</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #0d1117;
+      --panel:  #161b22;
+      --border: #21262d;
+      --accent: #f0a500;
+      --text:   #e6edf3;
+      --muted:  #8b949e;
+    }
+
+    html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
+    .app { display: flex; height: 100vh; overflow: hidden; }
+
+    .sidebar {
+      width: 300px; min-width: 260px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow-y: auto; z-index: 10;
+      transition: width .25s ease, min-width .25s ease;
+      position: relative;
+    }
+
+    .sidebar.collapsed {
+      width: 0; min-width: 0;
+      overflow: hidden;
+      border-right: none;
+    }
+
+    .sidebar-toggle {
+      position: fixed; top: 130px; left: 284px;
+      width: 32px; height: 32px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; z-index: 1000;
+      color: var(--text); font-size: 14px;
+      transition: left .25s ease, transform .25s ease;
+    }
+    .sidebar-toggle:hover { background: #21262d; }
+    .sidebar-toggle.collapsed { left: 16px; transform: rotate(180deg); }
+
+    .sidebar-header { padding: 28px 24px 20px; border-bottom: 1px solid var(--border); }
+
+    .eyebrow {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 0.15em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 6px;
+    }
+
+    .sidebar-header h1 {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 32px; font-weight: 900; line-height: 1;
+    }
+    .sidebar-header h1 span { color: var(--accent); }
+    .sidebar-header p { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    .stats { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+
+    .section-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 10px; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 14px;
+    }
+
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .stat-card {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 12px;
+      position: relative; overflow: hidden;
+    }
+    .stat-card::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; }
+    .stat-card.c1::before { background: #f0a500; }
+    .stat-card.c2::before { background: #58a6ff; }
+    .stat-card.c3::before { background: #3fb950; }
+    .stat-card.c4::before { background: #d2a8ff; }
+    .stat-card.c5::before { background: #e05a00; }
+    .stat-card.c6::before { background: #ff7b72; }
+    .stat-card.wide { grid-column: 1 / -1; }
+
+    .stat-value {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 28px; font-weight: 900; line-height: 1;
+    }
+    .stat-unit { font-size: 11px; color: var(--muted); margin-left: 2px; }
+    .stat-name { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    .loading-bar { height: 2px; background: var(--border); position: relative; overflow: hidden; }
+    .loading-bar::after {
+      content: ''; position: absolute; top: 0; left: -40%;
+      width: 40%; height: 100%; background: var(--accent);
+      animation: slide 1.2s ease-in-out infinite;
+    }
+    @keyframes slide { to { left: 100%; } }
+    .loading-bar.done { display: none; }
+
+    .load-status { font-size: 11px; color: var(--muted); padding: 8px 24px 16px; min-height: 36px; }
+
+    .error-box {
+      margin: 0 24px 12px;
+      background: rgba(255,123,114,.08);
+      border: 1px solid rgba(255,123,114,.3);
+      border-radius: 8px; padding: 12px 14px;
+      font-size: 12px; color: #ff7b72; display: none; line-height: 1.5;
+    }
+
+    .routes { padding: 20px 24px; flex: 1; }
+
+    .route-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: opacity .15s;
+    }
+    .route-item:last-child { border-bottom: none; }
+    .route-item:hover { opacity: .7; }
+
+    .route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .route-info { flex: 1; min-width: 0; }
+    .route-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .route-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .map-wrap { flex: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+    .leaflet-tile-pane { filter: brightness(.85) saturate(.7) hue-rotate(185deg); }
+    .leaflet-control-attribution { background: rgba(13,17,23,.8) !important; color: var(--muted) !important; font-size: 10px !important; }
+    .leaflet-control-zoom a { background: var(--panel) !important; color: var(--text) !important; border-color: var(--border) !important; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar-toggle" id="sidebar-toggle">‹</div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="eyebrow">Felix cykler</div>
+      <h1>Storbritannien rundt</h1>
+    </div>
+
+    <div class="stats">
+      <div class="section-label">Opsummering</div>
+      <div class="stat-grid">
+        <div class="stat-card wide c1">
+          <div class="stat-value" id="stat-km">—<span class="stat-unit">km</span></div>
+          <div class="stat-name">Samlet distance cyklet</div>
+        </div>
+        <div class="stat-card c2">
+          <div class="stat-value" id="stat-days">—</div>
+          <div class="stat-name">Dage cyklet</div>
+        </div>
+        <div class="stat-card c3">
+          <div class="stat-value" id="stat-avg">—</div>
+          <div class="stat-name">Gns. distance pr. dag</div>
+        </div>
+        <div class="stat-card c4">
+          <div class="stat-value" id="stat-longest">—</div>
+          <div class="stat-name">Længste dag</div>
+        </div>
+        <div class="stat-card c5">
+          <div class="stat-value" id="stat-elev">—<span class="stat-unit">m</span></div>
+          <div class="stat-name">Samlet stigning ↑</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="routes">
+      <div class="section-label">Ruter</div>
+      <div id="route-list"></div>
+    </div>
+  </aside>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+  </div>
+</div>
+
+<script>
+const map = L.map('map', { center: [54.5, -3.5], zoom: 6 });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 19
+}).addTo(map);
+
+const MANIFEST = './Routes/manifest.json';
+const COLORS = ['#f0a500','#e05a00','#58a6ff','#3fb950','#d2a8ff','#ff7b72','#79c0ff','#ffa657','#7ee787','#56d364'];
+const rides = [];
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000, r = Math.PI / 180;
+  const f1 = lat1*r, f2 = lat2*r, df = (lat2-lat1)*r, dl = (lon2-lon1)*r;
+  const a = Math.sin(df/2)**2 + Math.cos(f1)*Math.cos(f2)*Math.sin(dl/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function parseGPX(xmlStr) {
+  const doc = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  const pts = [...doc.querySelectorAll('trkpt, rtept')];
+  if (!pts.length) return null;
+
+  const latLngs = [];
+  let dist = 0, elev = 0, prev = null;
+
+  for (const pt of pts) {
+    const lat = parseFloat(pt.getAttribute('lat'));
+    const lon = parseFloat(pt.getAttribute('lon'));
+    const ele = parseFloat(pt.querySelector('ele')?.textContent ?? 'NaN');
+    if (isNaN(lat) || isNaN(lon)) continue;
+    if (prev) {
+      dist += haversine(prev.lat, prev.lon, lat, lon);
+      if (!isNaN(ele) && !isNaN(prev.ele) && ele > prev.ele) elev += ele - prev.ele;
+    }
+    prev = { lat, lon, ele };
+    latLngs.push([lat, lon]);
+  }
+
+  const timeEl = doc.querySelector('metadata time, trkpt time');
+  const date = timeEl ? new Date(timeEl.textContent) : null;
+  const nameEl = doc.querySelector('trk name, name');
+  const name = nameEl?.textContent.trim() || null;
+
+  return { latLngs, distKm: dist / 1000, elevM: Math.round(elev), date, name };
+}
+
+function fmt(km) { return km >= 100 ? Math.round(km).toLocaleString() : km.toFixed(1); }
+function set(id, html) { document.getElementById(id).innerHTML = html; }
+
+function updateStats() {
+  if (!rides.length) return;
+  const totalKm   = rides.reduce((s, r) => s + r.distKm, 0);
+  const totalElev = rides.reduce((s, r) => s + r.elevM, 0);
+  const avgKm     = totalKm / rides.length;
+  const longestKm = Math.max(...rides.map(r => r.distKm));
+  const dated     = rides.filter(r => r.date && !isNaN(r.date));
+  const days      = new Set(dated.map(r => r.date.toISOString().slice(0,10))).size;
+
+  set('stat-km',       fmt(totalKm) + '<span class="stat-unit">km</span>');
+  set('stat-days',     days || rides.length);
+  set('stat-avg',      fmt(avgKm)      + '<span class="stat-unit">km</span>');
+  set('stat-longest',  fmt(longestKm)  + '<span class="stat-unit">km</span>');
+  set('stat-elev',     Math.round(totalElev).toLocaleString() + '<span class="stat-unit">m</span>');
+}
+
+function renderRouteList() {
+  const list = document.getElementById('route-list');
+  if (!rides.length) { list.innerHTML = '<p style="font-size:12px;color:var(--muted);">No routes yet.</p>'; return; }
+
+  const sorted = [...rides].sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1; if (!b.date) return -1;
+    return b.date - a.date;
+  });
+
+  list.innerHTML = sorted.map(r => `
+    <div class="route-item" data-id="${r.id}">
+      <div class="route-dot" style="background:${r.color}"></div>
+      <div class="route-info">
+        <div class="route-name" title="${r.name}">${r.name}</div>
+        <div class="route-meta">
+          ${fmt(r.distKm)} km &middot; ${r.elevM.toLocaleString()} m &uarr;
+          ${r.date && !isNaN(r.date) ? ' &middot; ' + r.date.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.route-item').forEach(el => {
+    const id = parseInt(el.dataset.id);
+    el.addEventListener('mouseenter', () => rides[id].polyline.setStyle({ weight: 6, opacity: 1 }));
+    el.addEventListener('mouseleave', () => rides[id].polyline.setStyle({ weight: 3.5, opacity: 0.9 }));
+    el.addEventListener('click',      () => map.fitBounds(L.latLngBounds(rides[id].latLngs).pad(0.12)));
+  });
+}
+
+async function loadAllRoutes() {
+  let manifest;
+  try {
+    const res = await fetch(MANIFEST);
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    manifest = await res.json();
+  } catch (e) {
+    console.error('Could not load manifest.json:', e.message);
+    return;
+  }
+
+  for (const filename of manifest) {
+    try {
+      const res = await fetch(`./Routes/${filename}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = parseGPX(await res.text());
+      if (!data || data.latLngs.length < 2) throw new Error('No track points found');
+
+      const color    = COLORS[rides.length % COLORS.length];
+      const polyline = L.polyline(data.latLngs, { color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
+      rides.push({ id: rides.length, name: data.name || filename.replace(/\.gpx$/i,''), color, distKm: data.distKm, elevM: data.elevM, date: data.date, polyline, latLngs: data.latLngs });
+    } catch (e) {
+      console.warn(`Skipped ${filename}:`, e.message);
+    }
+    updateStats();
+    renderRouteList();
+  }
+
+  if (rides.length) map.fitBounds(L.latLngBounds(rides.flatMap(r => r.latLngs)).pad(0.08));
+}
+
+loadAllRoutes();
+
+document.getElementById('sidebar-toggle').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  document.getElementById('sidebar-toggle').classList.toggle('collapsed');
+  setTimeout(() => map.invalidateSize(), 260);
+});
+</script>
+</body>
+</html>
