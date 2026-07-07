@@ -1,0 +1,12 @@
+[
+  {
+    "from": "ride1.gpx",
+    "to": "ride2.gpx",
+    "mode": "train"
+  },
+  {
+    "from": "ride3.gpx",
+    "to": "ride4.gpx",
+    "mode": "car"
+  }
+]
