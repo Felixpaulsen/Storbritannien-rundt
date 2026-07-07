@@ -137,6 +137,8 @@
     .route-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .route-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
+    .bike-marker { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+
     .map-wrap { flex: 1; position: relative; }
     #map { width: 100%; height: 100%; }
     .leaflet-tile-pane { filter: brightness(.85) saturate(.7) hue-rotate(185deg); }
@@ -315,7 +317,29 @@ async function loadAllRoutes() {
     renderRouteList();
   }
 
-  if (rides.length) map.fitBounds(L.latLngBounds(rides.flatMap(r => r.latLngs)).pad(0.08));
+  if (rides.length) {
+    map.fitBounds(L.latLngBounds(rides.flatMap(r => r.latLngs)).pad(0.08));
+    placeBikeMarker();
+  }
+}
+
+function placeBikeMarker() {
+  const dated = rides.filter(r => r.date && !isNaN(r.date));
+  const newest = dated.length
+    ? dated.reduce((a, b) => a.date > b.date ? a : b)
+    : rides[rides.length - 1];
+
+  const lastPoint = newest.latLngs[newest.latLngs.length - 1];
+
+  const icon = L.divIcon({
+    className: '',
+    html: '<div class="bike-marker">🚴</div>',
+    iconAnchor: [13, 13]
+  });
+
+  L.marker(lastPoint, { icon, zIndexOffset: 1000 })
+    .addTo(map)
+    .bindTooltip(newest.name, { permanent: false, direction: 'top', offset: [0, -10] });
 }
 
 loadAllRoutes();
