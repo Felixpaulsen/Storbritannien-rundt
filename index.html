@@ -95,7 +95,6 @@
 
     .map-wrap { flex: 1; position: relative; }
     #map { width: 100%; height: 100%; }
-    .leaflet-tile-pane { filter: brightness(.85) saturate(.7) hue-rotate(185deg); }
     .leaflet-control-attribution { background: rgba(13,17,23,.8) !important; color: var(--muted) !important; font-size: 10px !important; }
     .leaflet-control-zoom a { background: var(--panel) !important; color: var(--text) !important; border-color: var(--border) !important; }
 
@@ -107,7 +106,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="eyebrow">Felix cykler</div>
-      <h1>Storbritannien <span>rundt 🏴󠁧󠁢󠁥󠁮󠁧󠁿🏴󠁧󠁢󠁷󠁬󠁳󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿🇬🇧</span></h1>
+      <h1>Storbritannien <span>rundt</span></h1>
     </div>
     <div class="photo-wrap" id="photo-wrap" style="display:none">
       <div class="photo-caption">Dagens billede</div>
@@ -152,8 +151,8 @@
 <script>
 // ── Map ────────────────────────────────────────────────────────────────────
 var map = L.map('map', { center: [54.5, -3.5], zoom: 6 });
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
   maxZoom: 19
 }).addTo(map);
 
@@ -179,6 +178,7 @@ function updateIconSizes() {
 map.on('zoomend', updateIconSizes);
 
 // ── Config ─────────────────────────────────────────────────────────────────
+var MANIFEST  = './Routes/manifest.json';
 var TRANSFERS = './Routes/transfers.json';
 var COLORS    = ['#f0a500','#e05a00','#58a6ff','#3fb950','#d2a8ff','#ff7b72','#79c0ff','#ffa657','#7ee787','#56d364'];
 var rides     = [];
@@ -193,24 +193,18 @@ function haversine(lat1, lon1, lat2, lon2) {
 
 // ── GPX parser ─────────────────────────────────────────────────────────────
 function parseGPX(xmlStr) {
-  var parser = new DOMParser();
-  var doc = parser.parseFromString(xmlStr, 'application/xml');
-
-  // Check for parse error
-  if (doc.querySelector('parsererror')) return null;
-
-  // Get points - try both namespaced and non-namespaced
-  var pts = doc.getElementsByTagName('trkpt');
-  if (pts.length === 0) pts = doc.getElementsByTagName('rtept');
-  if (pts.length === 0) return null;
-
   var latLngs = [], dist = 0, elev = 0, prev = null;
-  for (var i = 0; i < pts.length; i++) {
-    var pt  = pts[i];
-    var lat = parseFloat(pt.getAttribute('lat'));
-    var lon = parseFloat(pt.getAttribute('lon'));
-    var eleNodes = pt.getElementsByTagName('ele');
-    var ele = eleNodes.length ? parseFloat(eleNodes[0].textContent) : NaN;
+
+  // Regex-based parsing — much faster than DOMParser on mobile
+  var ptRe = /<trkpt[^>]+lat=["']([^"']+)["'][^>]+lon=["']([^"']+)["'][^>]*>([\s\S]*?)<\/trkpt>/g;
+  var eleRe = /<ele>([^<]+)<\/ele>/;
+  var match;
+
+  while ((match = ptRe.exec(xmlStr)) !== null) {
+    var lat = parseFloat(match[1]);
+    var lon = parseFloat(match[2]);
+    var eleMatch = eleRe.exec(match[3]);
+    var ele = eleMatch ? parseFloat(eleMatch[1]) : NaN;
     if (isNaN(lat) || isNaN(lon)) continue;
     if (prev) {
       dist += haversine(prev.lat, prev.lon, lat, lon);
@@ -220,10 +214,15 @@ function parseGPX(xmlStr) {
     latLngs.push([lat, lon]);
   }
 
-  var timeNodes = doc.getElementsByTagName('time');
-  var date = timeNodes.length ? new Date(timeNodes[0].textContent) : null;
-  var nameNodes = doc.getElementsByTagName('name');
-  var name = nameNodes.length ? nameNodes[0].textContent.trim() : null;
+  if (latLngs.length < 2) return null;
+
+  // Extract date from first <time> tag
+  var timeMatch = xmlStr.match(/<time>([^<]+)<\/time>/);
+  var date = timeMatch ? new Date(timeMatch[1]) : null;
+
+  // Extract name from <name> tag
+  var nameMatch = xmlStr.match(/<n(?:ame)?>([^<]+)<\/n(?:ame)?>/);
+  var name = nameMatch ? nameMatch[1].trim() : null;
 
   return { latLngs: latLngs, distKm: dist / 1000, elevM: Math.round(elev), date: date, name: name };
 }
@@ -327,39 +326,55 @@ function loadTransfers() {
 
 // ── Load all routes ────────────────────────────────────────────────────────
 function loadAllRoutes() {
-  function loadNext(n) {
-    var filename = 'ride' + n + '.gpx';
-    return fetch('./Routes/' + filename)
-      .then(function(res) {
-        if (!res.ok) return false;
-        return res.text().then(function(gpxText) {
-          var data = parseGPX(gpxText);
-          if (!data || data.latLngs.length < 2) return false;
-          var color    = COLORS[rides.length % COLORS.length];
-          var polyline = L.polyline(data.latLngs, { color: color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
-          rides.push({ id: rides.length, filename: filename, name: data.name || filename.replace(/\.gpx$/i,''), color: color, distKm: data.distKm, elevM: data.elevM, date: data.date, polyline: polyline, latLngs: data.latLngs });
-          updateStats();
-          renderRouteList();
-          return true;
-        });
-      })
-      .catch(function() { return false; });
-  }
+  console.log('Fetching manifest from:', MANIFEST);
+  fetch(MANIFEST + '?' + Date.now())
+    .then(function(res) {
+      console.log('Manifest response status:', res.status);
+      if (!res.ok) throw new Error('manifest.json not found, status: ' + res.status);
+      return res.json();
+    })
+    .then(function(manifest) {
+      console.log('Manifest contents:', JSON.stringify(manifest));
+      console.log('Firing', manifest.length, 'parallel requests...');
+      var promises = manifest.map(function(filename) {
+        return fetch('./Routes/' + filename)
+          .then(function(res) {
+            if (!res.ok) return null;
+            return res.text().then(function(gpxText) {
+              var data = parseGPX(gpxText);
+              if (!data || data.latLngs.length < 2) return null;
+              console.log('Parsed ' + filename + ': ' + data.latLngs.length + ' points, ' + data.distKm.toFixed(1) + 'km');
+              return { filename: filename, data: data };
+            });
+          })
+          .catch(function() { return null; });
+      });
 
-  function loop(n) {
-    return loadNext(n).then(function(found) {
-      if (found) return loop(n + 1);
+      return Promise.all(promises);
+    })
+    .then(function(results) {
+      console.log('All fetches done. Results:', results ? results.length : 'null');
+      if (!results) return;
+      results
+        .filter(function(r) { return r !== null; })
+        .forEach(function(r) {
+          var color    = COLORS[rides.length % COLORS.length];
+          var polyline = L.polyline(r.data.latLngs, { color: color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
+          rides.push({ id: rides.length, filename: r.filename, name: r.data.name || r.filename.replace(/\.gpx$/i,''), color: color, distKm: r.data.distKm, elevM: r.data.elevM, date: r.data.date, polyline: polyline, latLngs: r.data.latLngs });
+        });
+
+      updateStats();
+      renderRouteList();
+
       if (rides.length) {
         var allPts = [];
-        rides.forEach(function(r){ allPts = allPts.concat(r.latLngs); });
+        rides.forEach(function(r) { allPts = allPts.concat(r.latLngs); });
         map.fitBounds(L.latLngBounds(allPts).pad(0.08));
         placeBikeMarker();
-        return loadTransfers();
+        loadTransfers();
       }
-    });
-  }
-
-  loop(1).catch(function(e){ console.error('Fatal:', e.message); });
+    })
+    .catch(function(e) { console.error('FATAL loadAllRoutes:', e.message, e.stack); });
 }
 
 // ── Sidebar toggle ─────────────────────────────────────────────────────────
@@ -387,6 +402,7 @@ function loadDayPhoto() {
 }
 
 // ── Go ─────────────────────────────────────────────────────────────────────
+// Start both in parallel — neither waits for the other
 loadDayPhoto();
 loadAllRoutes();
 </script>
