@@ -67,8 +67,8 @@
     .route-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .route-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-    .bike-marker { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
-    .transfer-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); }
+    .bike-marker { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); transform: translate(-50%, -50%); display: inline-block; }
+    .transfer-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); transform: translate(-50%, -50%); display: inline-block; }
 
     .photo-wrap {
       border-bottom: 1px solid var(--border);
@@ -179,14 +179,14 @@ function updateIconSizes() {
     bikeMarker.setIcon(L.divIcon({
       className: '',
       html: bikeMarker.getIcon().options.html,
-      iconAnchor: [bikeSize/2, bikeSize/2]
+      iconAnchor: [0, 0]
     }));
   }
   transferMarkers.forEach(function(m) {
     m.setIcon(L.divIcon({
       className: '',
       html: m.getIcon().options.html,
-      iconAnchor: [transferSize/2, transferSize/2]
+      iconAnchor: [0, 0]
     }));
   });
 }
@@ -303,8 +303,7 @@ function placeBikeMarker() {
     : rides[rides.length - 1];
   if (!newest) return;
   var lastPt = newest.latLngs[newest.latLngs.length - 1];
-  var bikeSize = getIconSize(26);
-  var icon = L.divIcon({ className: '', html: '<div class="bike-marker">\uD83D\uDEB4</div>', iconAnchor: [bikeSize/2, bikeSize/2] });
+  var icon = L.divIcon({ className: '', html: '<div class="bike-marker">\uD83D\uDEB4</div>', iconAnchor: [0, 0] });
   bikeMarker = L.marker(lastPt, { icon: icon, zIndexOffset: 1000 }).addTo(map)
     .bindTooltip(newest.name, { permanent: false, direction: 'top', offset: [0, -10] });
 }
@@ -317,8 +316,7 @@ function drawTransfer(fromRide, toRide, mode) {
   var mid   = [(start[0]+end[0])/2, (start[1]+end[1])/2];
   var emoji = mode === 'train' ? '\uD83D\uDE86' : '\uD83D\uDE97';
   var label = mode === 'train' ? 'Tog' : 'Bil';
-  var tSize = getIconSize(20);
-  var icon  = L.divIcon({ className: '', html: '<div class="transfer-marker">' + emoji + '</div>', iconAnchor: [tSize/2, tSize/2] });
+  var icon  = L.divIcon({ className: '', html: '<div class="transfer-marker">' + emoji + '</div>', iconAnchor: [0, 0] });
   transferMarkers.push(L.marker(mid, { icon: icon, zIndexOffset: 900 }).addTo(map)
     .bindTooltip(label, { permanent: false, direction: 'top', offset: [0, -8] }));
 }
