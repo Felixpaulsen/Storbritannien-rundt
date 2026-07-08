@@ -106,7 +106,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="eyebrow">Felix cykler</div>
-      <h1>Storbritannien rundt<br>🏴󠁧󠁢󠁥󠁮󠁧󠁿🏴󠁧󠁢󠁷󠁬󠁳󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿🇬🇧</h1>
+      <h1>Storbritannien <span>rundt</span></h1>
     </div>
     <div class="photo-wrap" id="photo-wrap" style="display:none">
       <div class="photo-caption">Dagens billede</div>
@@ -151,8 +151,8 @@
 <script>
 // ── Map ────────────────────────────────────────────────────────────────────
 var map = L.map('map', { center: [54.5, -3.5], zoom: 6 });
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
   maxZoom: 19
 }).addTo(map);
 
@@ -325,27 +325,37 @@ function loadTransfers() {
 }
 
 // ── Load all routes ────────────────────────────────────────────────────────
+// ── Cache GPX text in localStorage — repeat visits are instant ────────────
+function fetchWithCache(url) {
+  var key = 'gpx:' + url;
+  try {
+    var cached = localStorage.getItem(key);
+    if (cached) return Promise.resolve(cached);
+  } catch(e) {}
+  return fetch(url)
+    .then(function(res) {
+      if (!res.ok) return null;
+      return res.text().then(function(text) {
+        try { localStorage.setItem(key, text); } catch(e) {}
+        return text;
+      });
+    });
+}
+
 function loadAllRoutes() {
-  console.log('Fetching manifest from:', MANIFEST);
   fetch(MANIFEST + '?' + Date.now())
     .then(function(res) {
-      console.log('Manifest response status:', res.status);
       if (!res.ok) throw new Error('manifest.json not found, status: ' + res.status);
       return res.json();
     })
     .then(function(manifest) {
-      console.log('Manifest contents:', JSON.stringify(manifest));
-      console.log('Firing', manifest.length, 'parallel requests...');
       var promises = manifest.map(function(filename) {
-        return fetch('./Routes/' + filename)
-          .then(function(res) {
-            if (!res.ok) return null;
-            return res.text().then(function(gpxText) {
-              var data = parseGPX(gpxText);
-              if (!data || data.latLngs.length < 2) return null;
-              console.log('Parsed ' + filename + ': ' + data.latLngs.length + ' points, ' + data.distKm.toFixed(1) + 'km');
-              return { filename: filename, data: data };
-            });
+        return fetchWithCache('./Routes/' + filename)
+          .then(function(gpxText) {
+            if (!gpxText) return null;
+            var data = parseGPX(gpxText);
+            if (!data || data.latLngs.length < 2) return null;
+            return { filename: filename, data: data };
           })
           .catch(function() { return null; });
       });
@@ -353,7 +363,6 @@ function loadAllRoutes() {
       return Promise.all(promises);
     })
     .then(function(results) {
-      console.log('All fetches done. Results:', results ? results.length : 'null');
       if (!results) return;
       results
         .filter(function(r) { return r !== null; })
