@@ -327,12 +327,16 @@ function loadTransfers() {
 
 // ── Load all routes ────────────────────────────────────────────────────────
 function loadAllRoutes() {
-  fetch(MANIFEST)
+  console.log('Fetching manifest from:', MANIFEST);
+  fetch(MANIFEST + '?' + Date.now())
     .then(function(res) {
-      if (!res.ok) throw new Error('manifest.json not found');
+      console.log('Manifest response status:', res.status);
+      if (!res.ok) throw new Error('manifest.json not found, status: ' + res.status);
       return res.json();
     })
     .then(function(manifest) {
+      console.log('Manifest contents:', JSON.stringify(manifest));
+      console.log('Firing', manifest.length, 'parallel requests...');
       var promises = manifest.map(function(filename) {
         return fetch('./Routes/' + filename)
           .then(function(res) {
@@ -340,6 +344,7 @@ function loadAllRoutes() {
             return res.text().then(function(gpxText) {
               var data = parseGPX(gpxText);
               if (!data || data.latLngs.length < 2) return null;
+              console.log('Parsed ' + filename + ': ' + data.latLngs.length + ' points, ' + data.distKm.toFixed(1) + 'km');
               return { filename: filename, data: data };
             });
           })
@@ -349,6 +354,7 @@ function loadAllRoutes() {
       return Promise.all(promises);
     })
     .then(function(results) {
+      console.log('All fetches done. Results:', results ? results.length : 'null');
       if (!results) return;
       results
         .filter(function(r) { return r !== null; })
@@ -369,7 +375,7 @@ function loadAllRoutes() {
         loadTransfers();
       }
     })
-    .catch(function(e) { console.error('Fatal:', e.message); });
+    .catch(function(e) { console.error('FATAL loadAllRoutes:', e.message, e.stack); });
 }
 
 // ── Sidebar toggle ─────────────────────────────────────────────────────────
