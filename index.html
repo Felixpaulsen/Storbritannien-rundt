@@ -326,50 +326,51 @@ function loadTransfers() {
 
 // ── Load all routes ────────────────────────────────────────────────────────
 function loadAllRoutes() {
-  function fetchRide(n) {
-    var filename = 'ride' + n + '.gpx';
-    return fetch('./Routes/' + filename)
-      .then(function(res) {
-        if (!res.ok) return null;
-        return res.text().then(function(gpxText) {
-          var data = parseGPX(gpxText);
-          if (!data || data.latLngs.length < 2) return null;
-          return { filename: filename, data: data };
-        });
-      })
-      .catch(function() { return null; });
+  // Fire all fetches in parallel immediately — no counting step.
+  // We try up to MAX_RIDES; any that 404 are silently ignored.
+  var MAX_RIDES = 99;
+  var promises  = [];
+
+  for (var i = 1; i <= MAX_RIDES; i++) {
+    (function(n) {
+      var filename = 'ride' + n + '.gpx';
+      promises.push(
+        fetch('./Routes/' + filename)
+          .then(function(res) {
+            if (!res.ok) return null;
+            return res.text().then(function(gpxText) {
+              var data = parseGPX(gpxText);
+              if (!data || data.latLngs.length < 2) return null;
+              return { n: n, filename: filename, data: data };
+            });
+          })
+          .catch(function() { return null; })
+      );
+    })(i);
   }
 
-  // Probe how many rides exist, then fetch all in parallel
-  function findCount(n) {
-    return fetch('./Routes/ride' + n + '.gpx', { method: 'HEAD' })
-      .then(function(res) { return res.ok ? findCount(n + 1) : n - 1; })
-      .catch(function() { return n - 1; });
-  }
-
-  findCount(1).then(function(count) {
-    if (!count) return;
-    var promises = [];
-    for (var i = 1; i <= count; i++) promises.push(fetchRide(i));
-
-    Promise.all(promises).then(function(results) {
-      results.forEach(function(r) {
-        if (!r) return;
+  Promise.all(promises).then(function(results) {
+    // Sort by ride number so routes are added in order
+    results
+      .filter(function(r) { return r !== null; })
+      .sort(function(a, b) { return a.n - b.n; })
+      .forEach(function(r) {
         var color    = COLORS[rides.length % COLORS.length];
         var polyline = L.polyline(r.data.latLngs, { color: color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
         rides.push({ id: rides.length, filename: r.filename, name: r.data.name || r.filename.replace(/\.gpx$/i,''), color: color, distKm: r.data.distKm, elevM: r.data.elevM, date: r.data.date, polyline: polyline, latLngs: r.data.latLngs });
       });
-      updateStats();
-      renderRouteList();
-      if (rides.length) {
-        var allPts = [];
-        rides.forEach(function(r){ allPts = allPts.concat(r.latLngs); });
-        map.fitBounds(L.latLngBounds(allPts).pad(0.08));
-        placeBikeMarker();
-        return loadTransfers();
-      }
-    });
-  }).catch(function(e){ console.error('Fatal:', e.message); });
+
+    updateStats();
+    renderRouteList();
+
+    if (rides.length) {
+      var allPts = [];
+      rides.forEach(function(r) { allPts = allPts.concat(r.latLngs); });
+      map.fitBounds(L.latLngBounds(allPts).pad(0.08));
+      placeBikeMarker();
+      loadTransfers();
+    }
+  }).catch(function(e) { console.error('Fatal:', e.message); });
 }
 
 // ── Sidebar toggle ─────────────────────────────────────────────────────────
@@ -397,6 +398,7 @@ function loadDayPhoto() {
 }
 
 // ── Go ─────────────────────────────────────────────────────────────────────
+// Start both in parallel — neither waits for the other
 loadDayPhoto();
 loadAllRoutes();
 </script>
