@@ -193,24 +193,18 @@ function haversine(lat1, lon1, lat2, lon2) {
 
 // ── GPX parser ─────────────────────────────────────────────────────────────
 function parseGPX(xmlStr) {
-  var parser = new DOMParser();
-  var doc = parser.parseFromString(xmlStr, 'application/xml');
-
-  // Check for parse error
-  if (doc.querySelector('parsererror')) return null;
-
-  // Get points - try both namespaced and non-namespaced
-  var pts = doc.getElementsByTagName('trkpt');
-  if (pts.length === 0) pts = doc.getElementsByTagName('rtept');
-  if (pts.length === 0) return null;
-
   var latLngs = [], dist = 0, elev = 0, prev = null;
-  for (var i = 0; i < pts.length; i++) {
-    var pt  = pts[i];
-    var lat = parseFloat(pt.getAttribute('lat'));
-    var lon = parseFloat(pt.getAttribute('lon'));
-    var eleNodes = pt.getElementsByTagName('ele');
-    var ele = eleNodes.length ? parseFloat(eleNodes[0].textContent) : NaN;
+
+  // Regex-based parsing — much faster than DOMParser on mobile
+  var ptRe = /<trkpt[^>]+lat=["']([^"']+)["'][^>]+lon=["']([^"']+)["'][^>]*>([\s\S]*?)<\/trkpt>/g;
+  var eleRe = /<ele>([^<]+)<\/ele>/;
+  var match;
+
+  while ((match = ptRe.exec(xmlStr)) !== null) {
+    var lat = parseFloat(match[1]);
+    var lon = parseFloat(match[2]);
+    var eleMatch = eleRe.exec(match[3]);
+    var ele = eleMatch ? parseFloat(eleMatch[1]) : NaN;
     if (isNaN(lat) || isNaN(lon)) continue;
     if (prev) {
       dist += haversine(prev.lat, prev.lon, lat, lon);
@@ -220,10 +214,15 @@ function parseGPX(xmlStr) {
     latLngs.push([lat, lon]);
   }
 
-  var timeNodes = doc.getElementsByTagName('time');
-  var date = timeNodes.length ? new Date(timeNodes[0].textContent) : null;
-  var nameNodes = doc.getElementsByTagName('name');
-  var name = nameNodes.length ? nameNodes[0].textContent.trim() : null;
+  if (latLngs.length < 2) return null;
+
+  // Extract date from first <time> tag
+  var timeMatch = xmlStr.match(/<time>([^<]+)<\/time>/);
+  var date = timeMatch ? new Date(timeMatch[1]) : null;
+
+  // Extract name from <name> tag
+  var nameMatch = xmlStr.match(/<n(?:ame)?>([^<]+)<\/n(?:ame)?>/);
+  var name = nameMatch ? nameMatch[1].trim() : null;
 
   return { latLngs: latLngs, distKm: dist / 1000, elevM: Math.round(elev), date: date, name: name };
 }
