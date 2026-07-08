@@ -70,17 +70,31 @@
     .bike-marker { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
     .transfer-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); }
 
+    .photo-wrap {
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      padding: 0 24px 20px;
+    }
+    .photo-wrap img {
+      width: 100%; display: block;
+      max-height: 220px; object-fit: cover;
+      border-radius: 6px;
+      opacity: 0; transition: opacity .4s ease;
+    }
+    .photo-wrap img.loaded { opacity: 1; }
+    .photo-caption {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 10px; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--muted); padding-bottom: 10px;
+    }
+
     .map-wrap { flex: 1; position: relative; }
     #map { width: 100%; height: 100%; }
     .leaflet-tile-pane { filter: brightness(.85) saturate(.7) hue-rotate(185deg); }
     .leaflet-control-attribution { background: rgba(13,17,23,.8) !important; color: var(--muted) !important; font-size: 10px !important; }
     .leaflet-control-zoom a { background: var(--panel) !important; color: var(--text) !important; border-color: var(--border) !important; }
 
-    #debug { position: fixed; bottom: 10px; right: 10px; z-index: 9999; background: rgba(0,0,0,.9); color: #fff; font: 12px monospace; padding: 10px 14px; border-radius: 6px; max-width: 420px; max-height: 260px; overflow-y: auto; display: none; }
-    #debug.visible { display: block; }
-    #debug .err { color: #ff7b72; }
-    #debug .ok  { color: #3fb950; }
-    #debug .warn { color: #ffa657; }
   </style>
 </head>
 <body>
@@ -90,6 +104,10 @@
     <div class="sidebar-header">
       <div class="eyebrow">Felix cykler</div>
       <h1>Storbritannien <span>rundt</span></h1>
+    </div>
+    <div class="photo-wrap" id="photo-wrap" style="display:none">
+      <div class="photo-caption">Dagens billede</div>
+      <img id="day-photo" alt="Dagens billede" />
     </div>
     <div class="stats">
       <div class="section-label">Opsummering</div>
@@ -125,19 +143,8 @@
     <div id="map"></div>
   </div>
 </div>
-<div id="debug"></div>
 
 <script>
-// ── Debug overlay ──────────────────────────────────────────────────────────
-var debugEl = document.getElementById('debug');
-function dbg(msg, cls) {
-  //debugEl.classList.add('visible');
-  var d = document.createElement('div');
-  if (cls) d.className = cls;
-  d.textContent = msg;
-  debugEl.appendChild(d);
-}
-
 // ── Map ────────────────────────────────────────────────────────────────────
 var map = L.map('map', { center: [54.5, -3.5], zoom: 6 });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -145,8 +152,28 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19
 }).addTo(map);
 
+function getIconSize(baseSize) {
+  var zoom = map.getZoom();
+  // Scale: small at low zoom, large at high zoom. Base zoom = 10.
+  var scale = Math.pow(1.2, zoom - 10);
+  scale = Math.max(0.4, Math.min(scale, 3));
+  return Math.round(baseSize * scale);
+}
+
+function updateIconSizes() {
+  var bikeSize     = getIconSize(26);
+  var transferSize = getIconSize(20);
+  document.querySelectorAll('.bike-marker').forEach(function(el) {
+    el.style.fontSize = bikeSize + 'px';
+  });
+  document.querySelectorAll('.transfer-marker').forEach(function(el) {
+    el.style.fontSize = transferSize + 'px';
+  });
+}
+
+map.on('zoomend', updateIconSizes);
+
 // ── Config ─────────────────────────────────────────────────────────────────
-var MANIFEST  = './Routes/manifest.json';
 var TRANSFERS = './Routes/transfers.json';
 var COLORS    = ['#f0a500','#e05a00','#58a6ff','#3fb950','#d2a8ff','#ff7b72','#79c0ff','#ffa657','#7ee787','#56d364'];
 var rides     = [];
@@ -165,13 +192,11 @@ function parseGPX(xmlStr) {
   var doc = parser.parseFromString(xmlStr, 'application/xml');
 
   // Check for parse error
-  var parseErr = doc.querySelector('parsererror');
-  if (parseErr) { dbg('GPX parse error: ' + parseErr.textContent.slice(0,80), 'err'); return null; }
+  if (doc.querySelector('parsererror')) return null;
 
   // Get points - try both namespaced and non-namespaced
   var pts = doc.getElementsByTagName('trkpt');
   if (pts.length === 0) pts = doc.getElementsByTagName('rtept');
-  dbg('pts found: ' + pts.length, pts.length > 0 ? 'ok' : 'err');
   if (pts.length === 0) return null;
 
   var latLngs = [], dist = 0, elev = 0, prev = null;
@@ -277,60 +302,48 @@ function drawTransfer(fromRide, toRide, mode) {
 function loadTransfers() {
   return fetch(TRANSFERS)
     .then(function(res) {
-      if (!res.ok) { dbg('transfers.json not found (' + res.status + ')', 'warn'); return; }
+      if (!res.ok) return;
       return res.json();
     })
     .then(function(transfers) {
       if (!transfers) return;
       var byFile = {};
       rides.forEach(function(r){ byFile[r.filename] = r; });
-      dbg('Known files: ' + Object.keys(byFile).join(', '), 'ok');
+    
       transfers.forEach(function(t) {
         var from = byFile[t.from], to = byFile[t.to];
-        if (!from || !to) { dbg('Transfer skipped: ' + t.from + ' -> ' + t.to, 'warn'); return; }
-        dbg('Drawing transfer: ' + t.from + ' -> ' + t.to, 'ok');
+        if (!from || !to) { console.warn('Transfer skipped:', t.from, t.to); return; }
+      
         drawTransfer(from, to, t.mode);
       });
     })
-    .catch(function(e){ dbg('transfers error: ' + e.message, 'warn'); });
+    .catch(function(e){ console.warn('transfers error:', e.message); });
 }
 
 // ── Load all routes ────────────────────────────────────────────────────────
 function loadAllRoutes() {
-  dbg('Fetching manifest...');
-  fetch(MANIFEST)
-    .then(function(res) {
-      if (!res.ok) throw new Error('manifest.json returned ' + res.status);
-      return res.json();
-    })
-    .then(function(manifest) {
-      dbg('Manifest loaded: ' + manifest.join(', '), 'ok');
-      var chain = Promise.resolve();
-      manifest.forEach(function(filename) {
-        chain = chain.then(function() {
-          return fetch('./Routes/' + filename)
-            .then(function(res) {
-              if (!res.ok) throw new Error('HTTP ' + res.status);
-              return res.text();
-            })
-            .then(function(gpxText) {
-              dbg('Parsing ' + filename + ' (' + gpxText.length + ' bytes)');
-              var data = parseGPX(gpxText);
-              if (!data || data.latLngs.length < 2) throw new Error('No points parsed');
-              var color    = COLORS[rides.length % COLORS.length];
-              var polyline = L.polyline(data.latLngs, { color: color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
-              rides.push({ id: rides.length, filename: filename, name: data.name || filename.replace(/\.gpx$/i,''), color: color, distKm: data.distKm, elevM: data.elevM, date: data.date, polyline: polyline, latLngs: data.latLngs });
-              dbg(filename + ' OK — ' + data.latLngs.length + ' pts, ' + data.distKm.toFixed(1) + 'km', 'ok');
-              updateStats();
-              renderRouteList();
-            })
-            .catch(function(e){ dbg('Skipped ' + filename + ': ' + e.message, 'warn'); });
+  function loadNext(n) {
+    var filename = 'ride' + n + '.gpx';
+    return fetch('./Routes/' + filename)
+      .then(function(res) {
+        if (!res.ok) return false;
+        return res.text().then(function(gpxText) {
+          var data = parseGPX(gpxText);
+          if (!data || data.latLngs.length < 2) return false;
+          var color    = COLORS[rides.length % COLORS.length];
+          var polyline = L.polyline(data.latLngs, { color: color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
+          rides.push({ id: rides.length, filename: filename, name: data.name || filename.replace(/\.gpx$/i,''), color: color, distKm: data.distKm, elevM: data.elevM, date: data.date, polyline: polyline, latLngs: data.latLngs });
+          updateStats();
+          renderRouteList();
+          return true;
         });
-      });
-      return chain;
-    })
-    .then(function() {
-      dbg('Done. ' + rides.length + ' rides loaded.', rides.length ? 'ok' : 'err');
+      })
+      .catch(function() { return false; });
+  }
+
+  function loop(n) {
+    return loadNext(n).then(function(found) {
+      if (found) return loop(n + 1);
       if (rides.length) {
         var allPts = [];
         rides.forEach(function(r){ allPts = allPts.concat(r.latLngs); });
@@ -338,8 +351,10 @@ function loadAllRoutes() {
         placeBikeMarker();
         return loadTransfers();
       }
-    })
-    .catch(function(e){ dbg('Fatal: ' + e.message, 'err'); });
+    });
+  }
+
+  loop(1).catch(function(e){ console.error('Fatal:', e.message); });
 }
 
 // ── Sidebar toggle ─────────────────────────────────────────────────────────
@@ -349,7 +364,17 @@ document.getElementById('sidebar-toggle').addEventListener('click', function() {
   setTimeout(function(){ map.invalidateSize(); }, 260);
 });
 
+// ── Day photo ──────────────────────────────────────────────────────────────
+function loadDayPhoto() {
+  var img  = document.getElementById('day-photo');
+  var wrap = document.getElementById('photo-wrap');
+  img.onload  = function() { wrap.style.display = 'block'; img.classList.add('loaded'); };
+  img.onerror = function() { wrap.style.display = 'none'; };
+  img.src = './Routes/day.jpg?' + Date.now(); // cache-bust so new photo always loads
+}
+
 // ── Go ─────────────────────────────────────────────────────────────────────
+loadDayPhoto();
 loadAllRoutes();
 </script>
 </body>
