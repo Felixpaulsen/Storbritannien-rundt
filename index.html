@@ -95,7 +95,6 @@
 
     .map-wrap { flex: 1; position: relative; }
     #map { width: 100%; height: 100%; }
-    .leaflet-tile-pane { filter: brightness(.85) saturate(.7) hue-rotate(185deg); }
     .leaflet-control-attribution { background: rgba(13,17,23,.8) !important; color: var(--muted) !important; font-size: 10px !important; }
     .leaflet-control-zoom a { background: var(--panel) !important; color: var(--text) !important; border-color: var(--border) !important; }
 
@@ -107,7 +106,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="eyebrow">Felix cykler</div>
-      <h1>Storbritannien <span>rundt 🏴󠁧󠁢󠁥󠁮󠁧󠁿🏴󠁧󠁢󠁷󠁬󠁳󠁿🏴󠁧󠁢󠁳󠁣󠁴󠁿🇬🇧</span></h1>
+      <h1>Storbritannien <span>rundt</span></h1>
     </div>
     <div class="photo-wrap" id="photo-wrap" style="display:none">
       <div class="photo-caption">Dagens billede</div>
@@ -152,8 +151,8 @@
 <script>
 // ── Map ────────────────────────────────────────────────────────────────────
 var map = L.map('map', { center: [54.5, -3.5], zoom: 6 });
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
   maxZoom: 19
 }).addTo(map);
 
@@ -327,28 +326,41 @@ function loadTransfers() {
 
 // ── Load all routes ────────────────────────────────────────────────────────
 function loadAllRoutes() {
-  function loadNext(n) {
+  function fetchRide(n) {
     var filename = 'ride' + n + '.gpx';
     return fetch('./Routes/' + filename)
       .then(function(res) {
-        if (!res.ok) return false;
+        if (!res.ok) return null;
         return res.text().then(function(gpxText) {
           var data = parseGPX(gpxText);
-          if (!data || data.latLngs.length < 2) return false;
-          var color    = COLORS[rides.length % COLORS.length];
-          var polyline = L.polyline(data.latLngs, { color: color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
-          rides.push({ id: rides.length, filename: filename, name: data.name || filename.replace(/\.gpx$/i,''), color: color, distKm: data.distKm, elevM: data.elevM, date: data.date, polyline: polyline, latLngs: data.latLngs });
-          updateStats();
-          renderRouteList();
-          return true;
+          if (!data || data.latLngs.length < 2) return null;
+          return { filename: filename, data: data };
         });
       })
-      .catch(function() { return false; });
+      .catch(function() { return null; });
   }
 
-  function loop(n) {
-    return loadNext(n).then(function(found) {
-      if (found) return loop(n + 1);
+  // Probe how many rides exist, then fetch all in parallel
+  function findCount(n) {
+    return fetch('./Routes/ride' + n + '.gpx', { method: 'HEAD' })
+      .then(function(res) { return res.ok ? findCount(n + 1) : n - 1; })
+      .catch(function() { return n - 1; });
+  }
+
+  findCount(1).then(function(count) {
+    if (!count) return;
+    var promises = [];
+    for (var i = 1; i <= count; i++) promises.push(fetchRide(i));
+
+    Promise.all(promises).then(function(results) {
+      results.forEach(function(r) {
+        if (!r) return;
+        var color    = COLORS[rides.length % COLORS.length];
+        var polyline = L.polyline(r.data.latLngs, { color: color, weight: 3.5, opacity: 0.9, lineJoin: 'round' }).addTo(map);
+        rides.push({ id: rides.length, filename: r.filename, name: r.data.name || r.filename.replace(/\.gpx$/i,''), color: color, distKm: r.data.distKm, elevM: r.data.elevM, date: r.data.date, polyline: polyline, latLngs: r.data.latLngs });
+      });
+      updateStats();
+      renderRouteList();
       if (rides.length) {
         var allPts = [];
         rides.forEach(function(r){ allPts = allPts.concat(r.latLngs); });
@@ -357,9 +369,7 @@ function loadAllRoutes() {
         return loadTransfers();
       }
     });
-  }
-
-  loop(1).catch(function(e){ console.error('Fatal:', e.message); });
+  }).catch(function(e){ console.error('Fatal:', e.message); });
 }
 
 // ── Sidebar toggle ─────────────────────────────────────────────────────────
