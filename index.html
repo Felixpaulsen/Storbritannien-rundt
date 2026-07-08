@@ -167,17 +167,35 @@ function getIconSize(baseSize) {
 function updateIconSizes() {
   var bikeSize     = getIconSize(26);
   var transferSize = getIconSize(20);
+
   document.querySelectorAll('.bike-marker').forEach(function(el) {
     el.style.fontSize = bikeSize + 'px';
   });
   document.querySelectorAll('.transfer-marker').forEach(function(el) {
     el.style.fontSize = transferSize + 'px';
   });
+
+  if (bikeMarker) {
+    bikeMarker.setIcon(L.divIcon({
+      className: '',
+      html: bikeMarker.getIcon().options.html,
+      iconAnchor: [bikeSize/2, bikeSize/2]
+    }));
+  }
+  transferMarkers.forEach(function(m) {
+    m.setIcon(L.divIcon({
+      className: '',
+      html: m.getIcon().options.html,
+      iconAnchor: [transferSize/2, transferSize/2]
+    }));
+  });
 }
 
 map.on('zoomend', updateIconSizes);
 
 // ── Config ─────────────────────────────────────────────────────────────────
+var bikeMarker      = null;
+var transferMarkers = [];
 var MANIFEST  = './Routes/manifest.json';
 var TRANSFERS = './Routes/transfers.json';
 var COLORS    = ['#f0a500','#e05a00','#58a6ff','#3fb950','#d2a8ff','#ff7b72','#79c0ff','#ffa657','#7ee787','#56d364'];
@@ -285,8 +303,9 @@ function placeBikeMarker() {
     : rides[rides.length - 1];
   if (!newest) return;
   var lastPt = newest.latLngs[newest.latLngs.length - 1];
-  var icon = L.divIcon({ className: '', html: '<div class="bike-marker">\uD83D\uDEB4</div>', iconAnchor: [13, 13] });
-  L.marker(lastPt, { icon: icon, zIndexOffset: 1000 }).addTo(map)
+  var bikeSize = getIconSize(26);
+  var icon = L.divIcon({ className: '', html: '<div class="bike-marker">\uD83D\uDEB4</div>', iconAnchor: [bikeSize/2, bikeSize/2] });
+  bikeMarker = L.marker(lastPt, { icon: icon, zIndexOffset: 1000 }).addTo(map)
     .bindTooltip(newest.name, { permanent: false, direction: 'top', offset: [0, -10] });
 }
 
@@ -298,9 +317,10 @@ function drawTransfer(fromRide, toRide, mode) {
   var mid   = [(start[0]+end[0])/2, (start[1]+end[1])/2];
   var emoji = mode === 'train' ? '\uD83D\uDE86' : '\uD83D\uDE97';
   var label = mode === 'train' ? 'Tog' : 'Bil';
-  var icon  = L.divIcon({ className: '', html: '<div class="transfer-marker">' + emoji + '</div>', iconAnchor: [10, 10] });
-  L.marker(mid, { icon: icon, zIndexOffset: 900 }).addTo(map)
-    .bindTooltip(label, { permanent: false, direction: 'top', offset: [0, -8] });
+  var tSize = getIconSize(20);
+  var icon  = L.divIcon({ className: '', html: '<div class="transfer-marker">' + emoji + '</div>', iconAnchor: [tSize/2, tSize/2] });
+  transferMarkers.push(L.marker(mid, { icon: icon, zIndexOffset: 900 }).addTo(map)
+    .bindTooltip(label, { permanent: false, direction: 'top', offset: [0, -8] }));
 }
 
 function loadTransfers() {
