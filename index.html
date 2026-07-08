@@ -67,9 +67,8 @@
     .route-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .route-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-    .start-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); transform: translate(-50%, -50%); display: inline-block; }
-    .bike-marker { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
-    .transfer-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); }
+    .bike-marker { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); transform: translate(-50%, -50%); display: inline-block; }
+    .transfer-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); transform: translate(-50%, -50%); display: inline-block; }
 
     .photo-wrap {
       border-bottom: 1px solid var(--border);
@@ -161,27 +160,41 @@ function getIconSize(baseSize) {
   var zoom = map.getZoom();
   // Scale: small at low zoom, large at high zoom. Base zoom = 10.
   var scale = Math.pow(1.2, zoom - 10);
-  scale = Math.max(0.4, Math.min(scale, 1.5));
+  scale = Math.max(0.4, Math.min(scale, 3));
   return Math.round(baseSize * scale);
 }
 
 function updateIconSizes() {
   var bikeSize     = getIconSize(26);
   var transferSize = getIconSize(20);
-  var startSize    = getIconSize(20);
-  document.querySelectorAll('.bike-marker').forEach(function(el) { el.style.fontSize = bikeSize + 'px'; });
-  document.querySelectorAll('.transfer-marker').forEach(function(el) { el.style.fontSize = transferSize + 'px'; });
-  document.querySelectorAll('.start-marker').forEach(function(el) { el.style.fontSize = startSize + 'px'; });
-  if (startMarker) { startMarker.setIcon(L.divIcon({ className: '', html: startMarker.getIcon().options.html, iconAnchor: [0, 0] })); }
-  if (bikeMarker)  { bikeMarker.setIcon(L.divIcon({ className: '', html: bikeMarker.getIcon().options.html, iconAnchor: [0, 0] })); }
-  transferMarkers.forEach(function(m) { m.setIcon(L.divIcon({ className: '', html: m.getIcon().options.html, iconAnchor: [0, 0] })); });
+
+  document.querySelectorAll('.bike-marker').forEach(function(el) {
+    el.style.fontSize = bikeSize + 'px';
+  });
+  document.querySelectorAll('.transfer-marker').forEach(function(el) {
+    el.style.fontSize = transferSize + 'px';
+  });
+
+  if (bikeMarker) {
+    bikeMarker.setIcon(L.divIcon({
+      className: '',
+      html: bikeMarker.getIcon().options.html,
+      iconAnchor: [0, 0]
+    }));
+  }
+  transferMarkers.forEach(function(m) {
+    m.setIcon(L.divIcon({
+      className: '',
+      html: m.getIcon().options.html,
+      iconAnchor: [0, 0]
+    }));
+  });
 }
 
 map.on('zoomend', updateIconSizes);
 
 // ── Config ─────────────────────────────────────────────────────────────────
 var bikeMarker      = null;
-var startMarker     = null;
 var transferMarkers = [];
 var MANIFEST  = './Routes/manifest.json';
 var TRANSFERS = './Routes/transfers.json';
@@ -282,19 +295,6 @@ function renderRouteList() {
 }
 
 // ── Bike marker ────────────────────────────────────────────────────────────
-function placeStartMarker() {
-  if (!rides.length) return;
-  var first = null;
-  for (var i = 0; i < rides.length; i++) {
-    if (rides[i].filename === 'ride1.gpx') { first = rides[i]; break; }
-  }
-  if (!first) first = rides[0];
-  var firstPt = first.latLngs[0];
-  var icon = L.divIcon({ className: '', html: '<div class="start-marker">🏁</div>', iconAnchor: [0, 0] });
-  startMarker = L.marker(firstPt, { icon: icon, zIndexOffset: 900 }).addTo(map)
-    .bindTooltip('Start', { permanent: false, direction: 'top', offset: [0, -8] });
-}
-
 function placeBikeMarker() {
   if (!rides.length) return;
   var dated = rides.filter(function(r){ return r.date && !isNaN(r.date); });
@@ -398,7 +398,6 @@ function loadAllRoutes() {
         rides.forEach(function(r) { allPts = allPts.concat(r.latLngs); });
         map.fitBounds(L.latLngBounds(allPts).pad(0.08));
         placeBikeMarker();
-        placeStartMarker();
         loadTransfers();
       }
     })
