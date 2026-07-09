@@ -3,5 +3,10 @@
     "from": "ride3.gpx",
     "to": "ride4.gpx",
     "mode": "car"
-  }
+  },
+{
+"from": "ride6.gpx",
+"to": "ride7.gpx",
+"mode": "train"
+}
 ]
