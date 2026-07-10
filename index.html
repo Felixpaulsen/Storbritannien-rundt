@@ -67,6 +67,7 @@
     .route-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .route-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
+    .start-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); transform: translate(-50%, -50%); display: inline-block; }
     .bike-marker { font-size: 26px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); transform: translate(-50%, -50%); display: inline-block; }
     .transfer-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); transform: translate(-50%, -50%); display: inline-block; }
 
@@ -295,6 +296,19 @@ function renderRouteList() {
 }
 
 // ── Bike marker ────────────────────────────────────────────────────────────
+function placeStartMarker() {
+  if (!rides.length) return;
+  var first = null;
+  for (var i = 0; i < rides.length; i++) {
+    if (rides[i].filename === 'ride1.gpx') { first = rides[i]; break; }
+  }
+  if (!first) first = rides[0];
+  var firstPt = first.latLngs[0];
+  var icon = L.divIcon({ className: '', html: '<div class="start-marker">🏁</div>', iconAnchor: [0, 0] });
+  L.marker(firstPt, { icon: icon, zIndexOffset: 900 }).addTo(map)
+    .bindTooltip('Start', { permanent: false, direction: 'top', offset: [0, -8] });
+}
+
 function placeBikeMarker() {
   if (!rides.length) return;
   var dated = rides.filter(function(r){ return r.date && !isNaN(r.date); });
@@ -398,6 +412,7 @@ function loadAllRoutes() {
         rides.forEach(function(r) { allPts = allPts.concat(r.latLngs); });
         map.fitBounds(L.latLngBounds(allPts).pad(0.08));
         placeBikeMarker();
+        placeStartMarker();
         loadTransfers();
       }
     })
