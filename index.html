@@ -263,7 +263,7 @@ function updateStats() {
   setHTML('stat-days',    String(days || rides.length));
   setHTML('stat-avg',     fmt(avgKm)     + '<span class="stat-unit">km</span>');
   setHTML('stat-longest', fmt(longestKm) + '<span class="stat-unit">km</span>');
-  setHTML('stat-elev',    Math.round(totalElev).toLocaleString() + '<span class="stat-unit">m</span> (' + Math.round(totalElev/8848.86*100).toLocaleString() + '% af Mt. Everest)');
+  setHTML('stat-elev',    Math.round(totalElev).toLocaleString() + '<span class="stat-unit">m (' + Math.round(totalElev/8848.86*100).toLocaleString() + '% af Mt. Everest)</span>');
 }
 
 // ── Route list ─────────────────────────────────────────────────────────────
