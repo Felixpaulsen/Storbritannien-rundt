@@ -64,7 +64,7 @@
     .route-item:hover { opacity: .7; }
     .route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
     .route-info { flex: 1; min-width: 0; }
-    .route-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .route-name { font-size: 13px; font-weight: 500; }
     .route-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
     .start-marker { font-size: 20px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); transform: translate(-50%, -50%); display: inline-block; }
@@ -263,7 +263,7 @@ function updateStats() {
   setHTML('stat-days',    String(days || rides.length));
   setHTML('stat-avg',     fmt(avgKm)     + '<span class="stat-unit">km</span>');
   setHTML('stat-longest', fmt(longestKm) + '<span class="stat-unit">km</span>');
-  setHTML('stat-elev',    Math.round(totalElev).toLocaleString() + '<span class="stat-unit">m<br> (' + Math.round(totalElev/8848.86*100).toLocaleString() + '% af Mt. Everest)</span>');
+  setHTML('stat-elev',    Math.round(totalElev).toLocaleString() + '<span class="stat-unit">m</span>');
 }
 
 // ── Route list ─────────────────────────────────────────────────────────────
