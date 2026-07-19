@@ -8,5 +8,10 @@
 "from": "ride6.gpx",
 "to": "ride7.gpx",
 "mode": "train"
+},
+{
+"from": "ride13.gpx",
+"to": "ride14.gpx",
+"mode": "train"
 }
 ]
